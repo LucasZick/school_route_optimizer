@@ -4,3 +4,4 @@ folium
 osmnx
 networkx
 Flask-Executor
+scikit-learn
