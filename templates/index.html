@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Otimizador de Rota Escolar</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        #map { height: calc(100vh - 120px); }
+        .list-group-item small { color: #6c757d; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark"><div class="container-fluid"><a class="navbar-brand" href="#"><i class="bi bi-bus-front-fill"></i> Otimizador de Rota Escolar</a></div></nav>
+    <div class="container-fluid mt-4">
+        <div id="alert-container"></div>
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card shadow-sm"><div class="card-header"><h5>Mapa da Operação</h5></div>
+                    <div class="card-body p-0"><div id="map" class="rounded-bottom"></div></div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm mb-3"><div class="card-body text-center p-3"><button id="optimizeBtn" class="btn btn-lg btn-danger w-100" onclick="runOptimization()"><i class="bi bi-geo-alt-fill"></i> Calcular Rota Otimizada</button></div></div>
+                <div class="card shadow-sm mb-3"><div class="card-header">Ferramentas de Teste</div><div class="card-body"><button id="addRandomBtn" class="btn btn-info w-100" onclick="addRandomStudents(10)"><i class="bi bi-shuffle"></i> Adicionar +10 Alunos Aleatórios</button></div></div>
+                <div class="accordion" id="controlPanel">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdd">Adicionar Pontos</button></h2>
+                        <div id="collapseAdd" class="accordion-collapse collapse show" data-bs-parent="#controlPanel">
+                            <div class="accordion-body">
+                                <form id="addGarageForm" class="mb-3"><h6><i class="bi bi-bus-front"></i> Garagem</h6><div class="input-group"><input type="text" class="form-control" name="address" placeholder="Endereço da Garagem" required><button type="submit" class="btn btn-dark">Salvar</button></div></form><hr>
+                                <form id="addSchoolForm" class="mb-3">
+                                    <h6><i class="bi bi-building"></i> Escola</h6>
+                                    <input type="text" class="form-control mb-2" name="name" placeholder="Nome da Escola" required>
+                                    <input type="text" class="form-control mb-2" name="address" placeholder="Endereço da Escola" required>
+                                    <div class="input-group mb-2">
+                                        <select class="form-select" name="route_type" id="schoolRouteType">
+                                            <option value="ida">Ida (Coleta)</option>
+                                            <option value="volta">Volta (Entrega)</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group">
+                                        <span class="input-group-text" id="schoolTimeLabel">Chegar até</span>
+                                        <input type="time" class="form-control" name="schedule_time" value="08:30" required>
+                                        <button type="submit" class="btn btn-danger">Salvar</button>
+                                    </div>
+                                </form><hr>
+                                <form id="addStudentForm">
+                                    <h6><i class="bi bi-person-plus"></i> Aluno</h6>
+                                    <input type="text" class="form-control mb-2" name="name" placeholder="Nome do Novo Aluno" required>
+                                    <input type="text" class="form-control mb-2" name="address" placeholder="Endereço do Aluno" required>
+                                    <label class="form-label small">Janela de Coleta:</label>
+                                    <div class="row g-2">
+                                        <div class="col"><div class="input-group"><span class="input-group-text">De</span><input type="time" class="form-control" name="start_time" value="07:15" required></div></div>
+                                        <div class="col"><div class="input-group"><span class="input-group-text">Até</span><input type="time" class="form-control" name="end_time" value="08:15" required></div></div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100 mt-2">+ Adicionar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePoints">Pontos Cadastrados</button></h2><div id="collapsePoints" class="accordion-collapse collapse" data-bs-parent="#controlPanel"><ul id="points-list" class="list-group list-group-flush" style="max-height: 40vh; overflow-y: auto;"></ul></div></div>
+                    <div id="itinerary-card" class="accordion-item" style="display: none;"><h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseItinerary">Itinerário da Rota</button></h2><div id="collapseItinerary" class="accordion-collapse collapse show" data-bs-parent="#controlPanel"><ul id="itinerary-list" class="list-group list-group-flush"></ul></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-body text-center p-4"><div class="spinner-border text-primary mb-3"></div><h4>Calculando...</h4><p class="text-muted">Isso pode levar até um minuto.</p></div></div></div></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let map = L.map('map').setView([-26.251, -49.38], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+            let markersLayer = L.layerGroup().addTo(map);
+            let routeLayer = L.layerGroup().addTo(map);
+            const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            const iconUrls = {
+                blue: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                red: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                black: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
+                shadow: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png'
+            };
+            function createIcon(color) { return L.icon({iconUrl: iconUrls[color] || iconUrls.blue, shadowUrl: iconUrls.shadow, iconSize: [25, 41], iconAnchor: [12, 41]}); }
+
+            function render(data) {
+                markersLayer.clearLayers(); routeLayer.clearLayers();
+                if (data.garage) L.marker([data.garage.lat, data.garage.lon], {icon: createIcon('black')}).addTo(markersLayer).bindPopup(`<strong>Garagem</strong><br>${data.garage.address}`);
+                if (data.school) L.marker([data.school.lat, data.school.lon], {icon: createIcon('red')}).addTo(markersLayer).bindPopup(`<strong>${data.school.name}</strong><br>${data.school.address}`);
+                if (data.students) data.students.forEach(s => L.marker([s.lat, s.lon], {icon: createIcon('blue')}).addTo(markersLayer).bindPopup(`<strong>${s.name}</strong><br>${s.address}`));
+                if (data.route && data.route.geometry) data.route.geometry.forEach(segment => L.polyline(segment, { color: 'purple' }).addTo(routeLayer));
+                
+                const pointsList = document.getElementById('points-list');
+                pointsList.innerHTML = '';
+                if(data.garage) pointsList.innerHTML += `<li class="list-group-item d-flex justify-content-between"><span><i class="bi bi-bus-front-fill"></i> <strong>Garagem</strong><br><small>${data.garage.address}</small></span><button class="btn btn-sm" onclick="deleteLocation('garage', ${data.garage.id})"><i class="bi bi-trash text-danger"></i></button></li>`;
+                
+                // --- ALTERADO: Mostra os detalhes corretos para Ida/Volta ---
+                if(data.school) {
+                    const timeLabel = data.school.route_type === 'ida' ? 'Chegar até:' : 'Sair a partir de:';
+                    pointsList.innerHTML += `<li class="list-group-item d-flex justify-content-between"><span><i class="bi bi-building"></i> <strong>${data.school.name}</strong><br><small>${data.school.address}<br>${timeLabel} ${data.school.schedule_time}</small></span><button class="btn btn-sm" onclick="deleteLocation('school', ${data.school.id})"><i class="bi bi-trash text-danger"></i></button></li>`;
+                }
+
+                if(data.students) data.students.forEach(s => { pointsList.innerHTML += `<li class="list-group-item d-flex justify-content-between"><span><i class="bi bi-person"></i> <strong>${s.name}</strong><br><small>${s.address}<br>Janela: ${s.start_time} - ${s.end_time}</small></span><button class="btn btn-sm" onclick="deleteLocation('student', ${s.id})"><i class="bi bi-trash text-danger"></i></button></li>`; });
+                
+                const itineraryCard = document.getElementById('itinerary-card');
+                const itineraryList = document.getElementById('itinerary-list');
+                itineraryList.innerHTML = '';
+                if(data.route && data.route.itinerary) {
+                    itineraryCard.style.display = 'block';
+                    itineraryList.innerHTML += `<li class="list-group-item active">Tempo Total da Rota: ${data.route.total_time} min</li>`;
+                    data.route.itinerary.forEach((stop, index) => {
+                        let icon = 'bi-geo-alt';
+                        if (stop.type === 'Garagem') icon = 'bi-bus-front-fill';
+                        if (stop.type === 'Escola') icon = 'bi-building';
+                        if (stop.type === 'Aluno') icon = 'bi-person';
+                        itineraryList.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center"><span><i class="bi ${icon}"></i> ${stop.name}</span><span class="badge bg-secondary rounded-pill">${stop.time}</span></li>`;
+                    });
+                } else {
+                    itineraryCard.style.display = 'none';
+                }
+            }
+
+            // --- ALTERADO: Atualiza o label do formulário da escola ---
+            document.getElementById('schoolRouteType').addEventListener('change', function() {
+                const timeLabel = document.getElementById('schoolTimeLabel');
+                if (this.value === 'ida') {
+                    timeLabel.textContent = 'Chegar até';
+                } else {
+                    timeLabel.textContent = 'Sair a partir de';
+                }
+            });
+            
+            async function fetchData() { const response = await fetch('/api/data'); const data = await response.json(); render(data); }
+            async function addLocation(type, form) {
+                const formData = new FormData(form); const data = { type, ...Object.fromEntries(formData.entries()) };
+                const response = await fetch('/api/location', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+                const result = await response.json();
+                showAlert(result.message, response.ok ? 'success' : 'danger');
+                if (response.ok) { form.reset(); document.getElementById('schoolRouteType').dispatchEvent(new Event('change')); fetchData(); }
+            }
+            window.deleteLocation = async function(type, id) { if (!confirm('Tem certeza?')) return; const response = await fetch(`/api/location/${type}/${id}`, { method: 'DELETE' }); if (response.ok) fetchData(); }
+            window.runOptimization = async function() { loadingModal.show(); const response = await fetch('/api/optimize', { method: 'POST' }); const result = await response.json(); if (result.success) { const intervalId = setInterval(async () => { const statusResponse = await fetch(`/api/optimize/status/${result.job_id}`); const statusResult = await statusResponse.json(); if (statusResult.status === 'complete' || statusResult.status === 'failed') { clearInterval(intervalId); loadingModal.hide(); showAlert(statusResult.message, statusResult.status === 'complete' ? 'success' : 'danger'); fetchData(); } }, 3000); } else { showAlert('Falha ao iniciar a otimização.', 'danger'); loadingModal.hide(); } }
+            window.addRandomStudents = async function(count) { showAlert(`Adicionando ${count} alunos...`, 'info', false); const response = await fetch('/api/add_random_students', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ count: count }) }); const result = await response.json(); showAlert(result.message, response.ok ? 'success' : 'danger'); if (response.ok) fetchData(); }
+            function showAlert(message, type = 'info', dismissable = true) { const container = document.getElementById('alert-container'); const dismissBtn = dismissable ? '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' : ''; container.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">${message}${dismissBtn}</div>`; if(dismissable) setTimeout(() => { const alertNode = container.querySelector('.alert'); if (alertNode) bootstrap.Alert.getOrCreateInstance(alertNode).close(); }, 5000); }
+            
+            document.getElementById('addGarageForm').addEventListener('submit', function(e) { e.preventDefault(); addLocation('garage', this); });
+            document.getElementById('addSchoolForm').addEventListener('submit', function(e) { e.preventDefault(); addLocation('school', this); });
+            document.getElementById('addStudentForm').addEventListener('submit', function(e) { e.preventDefault(); addLocation('student', this); });
+            fetchData();
+        });
+    </script>
+</body>
+</html>

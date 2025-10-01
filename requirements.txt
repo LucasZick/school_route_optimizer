@@ -1,0 +1,6 @@
+Flask
+Flask-SQLAlchemy
+folium
+osmnx
+networkx
+Flask-Executor

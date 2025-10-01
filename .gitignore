@@ -1,0 +1,35 @@
+# Arquivo .gitignore para o projeto Flask "Otimizador de Rota Escolar"
+
+# 1. Byte-code e diretórios de cache do Python
+# ---------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# 2. Diretórios de Ambientes Virtuais (venv)
+# ------------------------------------------
+# Ignora a pasta que contém as dependências instaladas,
+# que deve ser recriada a partir do requirements.txt
+venv/
+.venv/
+env/
+.env/
+
+
+# 3. Arquivos gerados pela aplicação
+# ----------------------------------
+# Ignora o arquivo do banco de dados SQLite. Cada desenvolvedor
+# deve ter sua própria base de dados local para testes.
+school_routes.db
+*.sqlite
+*.sqlite3
+
+
+# 4. Arquivos de configuração de IDEs e do Sistema Operacional
+# -------------------------------------------------------------
+# Mantém o repositório limpo de configurações pessoais de editores
+.vscode/
+.idea/
+.DS_Store
